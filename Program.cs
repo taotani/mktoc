@@ -1,21 +1,29 @@
 ﻿using System;
 using System.IO;
-using Microsoft.Office.Interop.PowerPoint;
+using System.Text.RegularExpressions;
+using PowerPoint = Microsoft.Office.Interop.PowerPoint;
+using Word = Microsoft.Office.Interop.Word;
 
 namespace index_generator
 {
     class Program
     {
+        private static readonly Regex BEGIN_SECTION = new Regex(@"^\d\.\d\.[^\d]", RegexOptions.Compiled);
+        private static readonly Regex BEGIN_SUB_SECTION = new Regex(@"^\d\.\d\.\d\.", RegexOptions.Compiled);
+        private const int pt = 11;
+        private static int paragraphCounter = 0;
         static void GenerateIndex(string rootPath)
         {
-            var objPowerPoint = new Application();
+            var objPowerPoint = new PowerPoint.Application();
+            var objWord = new Word.Application();
             foreach (var file in Directory.GetFiles(rootPath, "*.ppt?", SearchOption.AllDirectories))
             {
                 if (file.Contains("reference")) continue;
                 var inputPath = Path.GetFullPath(file);
                 var dir_name = Path.GetDirectoryName(inputPath);
                 var file_name = Path.GetFileNameWithoutExtension(inputPath);
-                var outputPath = Path.Combine(dir_name, file_name + ".index.txt");
+                var outputPath = Path.Combine(dir_name, file_name + ".index.docx");
+                bool listingSubSections = false;
                 // skipping documents that have been already converted
                 if (File.Exists(outputPath) && File.GetLastWriteTime(outputPath) >= File.GetLastWriteTime(inputPath))
                 {
@@ -26,23 +34,131 @@ namespace index_generator
                 {
                     Console.WriteLine($"Extracting index for {inputPath}");
                     var pptDoc = objPowerPoint.Presentations.Open(inputPath);
-                    using (var writer = new StreamWriter(outputPath))
+                    var wordDoc = objWord.Documents.Add(Visible: false);
+                    for (int i = 1; i <= pptDoc.Slides.Count; ++i)
                     {
-                        for (int i = 1; i <= pptDoc.Slides.Count; ++i)
+                        var slide = pptDoc.Slides[i];
+                        var title = slide.Shapes.Title.TextFrame.TextRange.Text
+                                    .Replace("\v", "")
+                                    .Replace("\t", "")
+                                    .Replace("\r\n", "");
+                        var pageNum = slide.SlideNumber;
+                        if (title.Contains("章"))
                         {
-                            var slide = pptDoc.Slides[i];
-                            var title = slide.Shapes.Title.TextFrame.TextRange.Text
-                                        .Replace("\v", "")
-                                        .Replace("\t", "")
-                                        .Replace("\r\n", "");
-                            var pageNum = slide.SlideNumber;
-                            writer.WriteLine($"{title}\t{pageNum}");
+                            Console.WriteLine($"chapter: {title}");
+                            if (i != 1) NewParagraph(wordDoc, "");
+                            NewParagraphForChapters(wordDoc, $"{title}\t{pageNum}");
+                            listingSubSections = false;
+                        }
+                        else if (BEGIN_SUB_SECTION.IsMatch(title))
+                        {
+                            Console.WriteLine($"subsection: {title}");
+                            NewParagraphForSubSections(wordDoc, $"{title}\t{pageNum}");
+                            listingSubSections = true;
+                        }
+                        else if (BEGIN_SECTION.IsMatch(title))
+                        {
+                            Console.WriteLine($"section: {title}");
+                            NewParagraphForSections(wordDoc, $"{title}\t{pageNum}");
+                            listingSubSections = false;
+                        }
+                        else if (listingSubSections)
+                        {
+                            Console.WriteLine($"subsection: {title}");
+                            NewParagraphForSubSections(wordDoc, $"{title}\t{pageNum}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"section: {title}");
+                            NewParagraphForSections(wordDoc, $"{title}\t{pageNum}");
                         }
                     }
+                    AddHeader(wordDoc, file_name);
+                    AddFooter(wordDoc, file_name);
                     pptDoc.Close();
+                    wordDoc.SaveAs2(outputPath);
+                    wordDoc.Close();
                     Console.WriteLine($"Completed: {outputPath}.");
                 }
+                objPowerPoint.Quit();
+                objWord.Quit();
             }
+        }
+        private static string FooterHeaderName(string fileName){
+            if (fileName.Contains("main")) return "本編目次";
+            else if(fileName.Contains("appendix")) return "付録目次";
+            else return "目次";
+        }
+        private static void AddHeader(Word.Document wordDoc, string fileName)
+        {
+            foreach (Word.Section section in wordDoc.Sections)
+            {
+                foreach (Word.HeaderFooter header in section.Headers)
+                {
+                    header.Range.Paragraphs.Add();
+                    var targetRange = header.Range.Paragraphs.Add().Range;
+                    header.Range.Borders.Enable = 1;
+                    header.Range.Borders.InsideLineStyle = Word.WdLineStyle.wdLineStyleNone;
+                    header.Range.Borders.OutsideLineStyle = Word.WdLineStyle.wdLineStyleThinThickSmallGap;
+                    header.Range.Borders[Word.WdBorderType.wdBorderLeft].LineStyle = Word.WdLineStyle.wdLineStyleNone;
+                    header.Range.Borders[Word.WdBorderType.wdBorderRight].LineStyle = Word.WdLineStyle.wdLineStyleNone;
+                    header.Range.Borders[Word.WdBorderType.wdBorderTop].LineStyle = Word.WdLineStyle.wdLineStyleNone;
+                    //header.Range.Borders[Word.WdBorderType.wdBorderBottom].LineWidth = Word.WdLineWidth.wdLineWidth025pt;
+                    targetRange.Borders[Word.WdBorderType.wdBorderBottom].LineStyle = Word.WdLineStyle.wdLineStyleThinThickSmallGap;
+                    targetRange.Text += $"【{FooterHeaderName(fileName)}】";
+                    targetRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphRight;
+                }
+            }
+        }
+        private static void AddFooter(Word.Document wordDoc, string fileName)
+        {
+            foreach (Word.Section section in wordDoc.Sections)
+            {
+                foreach (Word.HeaderFooter footer in section.Footers)
+                {
+                    footer.Range.Borders.Enable = 1;
+                    footer.Range.Fields.Add(footer.Range, Word.WdFieldType.wdFieldPage);
+                    footer.Range.InsertBefore($"【{FooterHeaderName(fileName)}－");
+                    footer.Range.InsertAfter("】");
+                    footer.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphCenter;
+                }
+            }
+        }
+        private static Word.Paragraph NewParagraphForChapters(Word.Document wordDoc, string str)
+        {
+            var p = NewParagraph(wordDoc, str);
+            p.Range.ParagraphFormat.LeftIndent = 1.35F * pt;
+            p.Range.ParagraphFormat.RightIndent = 1F * pt;
+            p.Range.Bold = 1;
+            return p;
+        }
+        private static Word.Paragraph NewParagraphForSections(Word.Document wordDoc, string str)
+        {
+            var p = NewParagraph(wordDoc, str);
+            p.Range.ParagraphFormat.LeftIndent = 2.02F * pt;
+            p.Range.ParagraphFormat.RightIndent = 1F * pt;
+            p.Range.Bold = 0;
+            return p;
+        }
+        private static Word.Paragraph NewParagraphForSubSections(Word.Document wordDoc, string str)
+        {
+            var p = NewParagraph(wordDoc, str);
+            p.Range.ParagraphFormat.LeftIndent = 3.37F * pt;
+            p.Range.ParagraphFormat.RightIndent = 1F * pt;
+            p.Range.Bold = 0;
+            return p;
+        }
+        private static Word.Paragraph NewParagraph(Word.Document wordDoc, string str)
+        {
+            var wordParagraph = wordDoc.Content.Paragraphs.Add();
+            if(paragraphCounter++ == 0)
+                wordParagraph.Range.Text = str;
+            else
+                wordParagraph.Range.Text += str;
+            wordParagraph.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphJustify;
+            wordParagraph.Range.ParagraphFormat.TabStops.ClearAll();
+            wordParagraph.Range.ParagraphFormat.TabStops.Add(40 * pt, Alignment: Word.WdTabAlignment.wdAlignTabRight, Leader: Word.WdTabLeader.wdTabLeaderDots);
+            return wordParagraph;
         }
         static void Main(string[] args)
         {
