@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 using Word = Microsoft.Office.Interop.Word;
 
-namespace index_generator
+namespace toc_generator
 {
     class Program
     {
@@ -12,7 +12,7 @@ namespace index_generator
         private static readonly Regex BEGIN_SUB_SECTION = new Regex(@"^\d\.\d\.\d\.", RegexOptions.Compiled);
         private const int pt = 11;
         private static int paragraphCounter = 0;
-        static void GenerateIndex(string rootPath)
+        static void GenerateTOC(string rootPath)
         {
             var objPowerPoint = new PowerPoint.Application();
             var objWord = new Word.Application();
@@ -22,7 +22,7 @@ namespace index_generator
                 var inputPath = Path.GetFullPath(file);
                 var dir_name = Path.GetDirectoryName(inputPath);
                 var file_name = Path.GetFileNameWithoutExtension(inputPath);
-                var outputPath = Path.Combine(dir_name, file_name + ".index.docx");
+                var outputPath = Path.Combine(dir_name, file_name + ".toc.docx");
                 bool listingSubSections = false;
                 // skipping documents that have been already converted
                 if (File.Exists(outputPath) && File.GetLastWriteTime(outputPath) >= File.GetLastWriteTime(inputPath))
@@ -32,7 +32,7 @@ namespace index_generator
                 }
                 else
                 {
-                    Console.WriteLine($"Extracting index for {inputPath}");
+                    Console.WriteLine($"Extracting toc for {inputPath}");
                     var pptDoc = objPowerPoint.Presentations.Open(inputPath);
                     var wordDoc = objWord.Documents.Add(Visible: false);
                     for (int i = 1; i <= pptDoc.Slides.Count; ++i)
@@ -75,14 +75,14 @@ namespace index_generator
                     }
                     AddHeader(wordDoc, file_name);
                     AddFooter(wordDoc, file_name);
-                    pptDoc.Close();
                     wordDoc.SaveAs2(outputPath);
-                    wordDoc.Close();
+                    //wordDoc.Close();
+                    //pptDoc.Close();
                     Console.WriteLine($"Completed: {outputPath}.");
                 }
-                objPowerPoint.Quit();
-                objWord.Quit();
             }
+            objPowerPoint.Quit();
+            objWord.Quit();
         }
         private static string FooterHeaderName(string fileName){
             if (fileName.Contains("main")) return "本編目次";
@@ -162,7 +162,7 @@ namespace index_generator
         }
         static void Main(string[] args)
         {
-            GenerateIndex(args[0]);
+            GenerateTOC(args[0]);
         }
     }
 }
