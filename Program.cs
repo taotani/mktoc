@@ -8,85 +8,103 @@ namespace toc_generator
 {
     class Program
     {
-        private static readonly Regex BEGIN_SECTION = new Regex(@"^\d\.\d\.[^\d]", RegexOptions.Compiled);
-        private static readonly Regex BEGIN_SUB_SECTION = new Regex(@"^\d\.\d\.\d\.", RegexOptions.Compiled);
+        private static readonly Regex BEGIN_SECTION = new Regex(@"(^\d\.\d\.[^\d])|([A-Z]\d\.[^\d])|(この章)|(目次)|(目標)", RegexOptions.Compiled);
+        private static readonly Regex BEGIN_SUB_SECTION = new Regex(@"(^\d\.\d\.\d)|([A-Z]\d\.\d)", RegexOptions.Compiled);
+        private static readonly Regex BEGIN_CHAPTER = new Regex(@"(^第.章)|(^\d\.[^\d])", RegexOptions.Compiled);
         private const int pt = 11;
         private static int paragraphCounter = 0;
         static void GenerateTOC(string rootPath)
         {
             var objPowerPoint = new PowerPoint.Application();
             var objWord = new Word.Application();
-            foreach (var file in Directory.GetFiles(rootPath, "*.ppt?", SearchOption.AllDirectories))
+            try
             {
-                if (file.Contains("reference")) continue;
-                var inputPath = Path.GetFullPath(file);
-                var dir_name = Path.GetDirectoryName(inputPath);
-                var file_name = Path.GetFileNameWithoutExtension(inputPath);
-                var outputPath = Path.Combine(dir_name, file_name + ".toc.docx");
-                bool listingSubSections = false;
-                // skipping documents that have been already converted
-                if (File.Exists(outputPath) && File.GetLastWriteTime(outputPath) >= File.GetLastWriteTime(inputPath))
+                foreach (var file in Directory.GetFiles(rootPath, "*.ppt?", SearchOption.AllDirectories))
                 {
-                    Console.WriteLine($"skipping {inputPath}");
-                    continue;
-                }
-                else
-                {
-                    Console.WriteLine($"Extracting toc for {inputPath}");
-                    var pptDoc = objPowerPoint.Presentations.Open(inputPath);
-                    var wordDoc = objWord.Documents.Add(Visible: false);
-                    for (int i = 1; i <= pptDoc.Slides.Count; ++i)
+                    if (file.Contains("reference")) continue;
+                    var inputPath = Path.GetFullPath(file);
+                    var dir_name = Path.GetDirectoryName(inputPath);
+                    var file_name = Path.GetFileNameWithoutExtension(inputPath);
+                    var outputPath = Path.Combine(dir_name, file_name + ".toc.docx");
+                    bool listingSubSections = false;
+                    // skipping documents that have been already converted
+                    if (File.Exists(outputPath) && File.GetLastWriteTime(outputPath) >= File.GetLastWriteTime(inputPath))
                     {
-                        var slide = pptDoc.Slides[i];
-                        var title = slide.Shapes.Title.TextFrame.TextRange.Text
-                                    .Replace("\v", "")
-                                    .Replace("\t", "")
-                                    .Replace("\r\n", "");
-                        var pageNum = slide.SlideNumber;
-                        if (title.Contains("章"))
-                        {
-                            Console.WriteLine($"chapter: {title}");
-                            if (i != 1) NewParagraph(wordDoc, "");
-                            NewParagraphForChapters(wordDoc, $"{title}\t{pageNum}");
-                            listingSubSections = false;
-                        }
-                        else if (BEGIN_SUB_SECTION.IsMatch(title))
-                        {
-                            Console.WriteLine($"subsection: {title}");
-                            NewParagraphForSubSections(wordDoc, $"{title}\t{pageNum}");
-                            listingSubSections = true;
-                        }
-                        else if (BEGIN_SECTION.IsMatch(title))
-                        {
-                            Console.WriteLine($"section: {title}");
-                            NewParagraphForSections(wordDoc, $"{title}\t{pageNum}");
-                            listingSubSections = false;
-                        }
-                        else if (listingSubSections)
-                        {
-                            Console.WriteLine($"subsection: {title}");
-                            NewParagraphForSubSections(wordDoc, $"{title}\t{pageNum}");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"section: {title}");
-                            NewParagraphForSections(wordDoc, $"{title}\t{pageNum}");
-                        }
+                        Console.WriteLine($"skipping {inputPath}");
+                        continue;
                     }
-                    AddHeader(wordDoc, file_name);
-                    AddFooter(wordDoc, file_name);
-                    wordDoc.SaveAs2(outputPath);
-                    //wordDoc.Close();
-                    //pptDoc.Close();
-                    Console.WriteLine($"Completed: {outputPath}.");
+                    else
+                    {
+                        Console.WriteLine($"Extracting toc for {inputPath}");
+                        var pptDoc = objPowerPoint.Presentations.Open(inputPath);
+                        var wordDoc = objWord.Documents.Add(Visible: false);
+                        for (int i = 1; i <= pptDoc.Slides.Count; ++i)
+                        {
+                            var slide = pptDoc.Slides[i];
+                            var title = slide.Shapes.Title.TextFrame.TextRange.Text
+                                        .Replace("\v", "")
+                                        .Replace("\t", "")
+                                        .Replace("\r\n", "");
+                            var pageNum = slide.SlideNumber;
+                            if (title == string.Empty)
+                            {
+                                continue;
+                            }
+                            else if (BEGIN_SUB_SECTION.IsMatch(title))
+                            {
+                                Console.WriteLine($"subsection: {title}");
+                                NewParagraphForSubSections(wordDoc, $"{title}\t{pageNum}");
+                                listingSubSections = true;
+                            }
+                            else if (BEGIN_SECTION.IsMatch(title))
+                            {
+                                Console.WriteLine($"section: {title}");
+                                NewParagraphForSections(wordDoc, $"{title}\t{pageNum}");
+                                listingSubSections = true;
+                            }
+                            else if (BEGIN_CHAPTER.IsMatch(title))
+                            {
+                                Console.WriteLine($"chapter: {title}");
+                                if (i != 1) NewParagraph(wordDoc, "");
+                                NewParagraphForChapters(wordDoc, $"{title}\t{pageNum}");
+                                listingSubSections = true;
+                            }
+                            else if (title.Contains("付録") || title.Contains("Appendix"))
+                            {
+                                Console.WriteLine($"Chapter: {title}");
+                                NewParagraphForChapters(wordDoc, $"{title}\t{pageNum}");
+                                listingSubSections = true;
+                            }
+                            else if (listingSubSections)
+                            {
+                                Console.WriteLine($"subsection: {title}");
+                                NewParagraphForSubSections(wordDoc, $"{title}\t{pageNum}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"section: {title}");
+                                NewParagraphForSections(wordDoc, $"{title}\t{pageNum}");
+                            }
+                        }
+                        AddHeader(wordDoc, file_name);
+                        AddFooter(wordDoc, file_name);
+                        wordDoc.SaveAs2(outputPath);
+                        //wordDoc.Close();
+                        //pptDoc.Close();
+                        Console.WriteLine($"Completed: {outputPath}.");
+                    }
                 }
             }
-            objPowerPoint.Quit();
-            objWord.Quit();
+            finally
+            {
+                objPowerPoint.Quit();
+                objWord.Quit();
+            }
         }
-        private static string FooterHeaderName(string fileName){
+        private static string FooterHeaderName(string fileName)
+        {
             if (fileName.Contains("main")) return "本編目次";
-            else if(fileName.Contains("appendix")) return "付録目次";
+            else if (fileName.Contains("appendix")) return "付録目次";
             else return "目次";
         }
         private static void AddHeader(Word.Document wordDoc, string fileName)
@@ -151,7 +169,7 @@ namespace toc_generator
         private static Word.Paragraph NewParagraph(Word.Document wordDoc, string str)
         {
             var wordParagraph = wordDoc.Content.Paragraphs.Add();
-            if(paragraphCounter++ == 0)
+            if (paragraphCounter++ == 0)
                 wordParagraph.Range.Text = str;
             else
                 wordParagraph.Range.Text += str;
