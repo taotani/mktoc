@@ -4,6 +4,7 @@ The utility program generates, given a PowerPoint file, a table of contents and 
 
 ## Requirements
 - .NET Core SDK and runtime >= 3.1
+- Microsoft Office
 
 ## Usage
 ```
