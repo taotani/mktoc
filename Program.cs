@@ -25,17 +25,22 @@ namespace toc_generator
         /// <param name="rootPath">The root path that contains all PowerPoint documents to be processed</param>
         static void GenerateTOC(string rootPath)
         {
-            var objPowerPoint = new PowerPoint.Application(){
+            var objPowerPoint = new PowerPoint.Application()
+            {
                 DisplayAlerts = PowerPoint.PpAlertLevel.ppAlertsNone
             };
-            var objWord = new Word.Application(){
+            var objWord = new Word.Application()
+            {
                 DisplayAlerts = Word.WdAlertLevel.wdAlertsNone
             };
             try
             {
                 foreach (var file in Directory.GetFiles(rootPath, "*.ppt?", SearchOption.AllDirectories))
                 {
-                    if (file.Contains("reference")) continue;
+                    // skip temporary files and files under "reference" (sub-)directories
+                    if (file.Contains("reference")
+                    || ((File.GetAttributes(file) & FileAttributes.Temporary) == FileAttributes.Temporary))
+                        continue;
                     var inputPath = Path.GetFullPath(file);
                     var dir_name = Path.GetDirectoryName(inputPath);
                     var file_name = Path.GetFileNameWithoutExtension(inputPath);
@@ -105,10 +110,10 @@ namespace toc_generator
                         wordDoc.SaveAs2(outputPath);
                         try
                         {
-                            wordDoc.Close(SaveChanges:false);
+                            wordDoc.Close(SaveChanges: false);
                             pptDoc.Close();
                         }
-                        catch(Exception e)
+                        catch (Exception e)
                         {
                             Console.Error.WriteLine($"An exception has been thrown @ closing the PowerPoint and Word documents: {e.Message}");
                         }
