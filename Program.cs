@@ -8,9 +8,9 @@ namespace toc_generator
 {
     class Program
     {
-        private static readonly Regex BEGIN_SECTION = new Regex(@"(^\d\.\d\.[^\d])|([A-Z]\d\.[^\d])|(この章)|(目次)|(目標)", RegexOptions.Compiled);
-        private static readonly Regex BEGIN_SUB_SECTION = new Regex(@"(^\d\.\d\.\d)|([A-Z]\d\.\d)", RegexOptions.Compiled);
-        private static readonly Regex BEGIN_CHAPTER = new Regex(@"(^第.章)|(^\d\.[^\d])", RegexOptions.Compiled);
+        private static readonly Regex BEGIN_SECTION = new Regex(@"(^\d\.\d.[^\d])|(^[A-Z]\d.[^\d])|(^この章)|(^目次)|(^目標)", RegexOptions.Compiled);
+        private static readonly Regex BEGIN_SUB_SECTION = new Regex(@"(^\d\.\d\.\d)|(^[A-Z]\d\.\d)", RegexOptions.Compiled);
+        private static readonly Regex BEGIN_CHAPTER = new Regex(@"(^第.章)|(^\d\.[^\d])|(^§)", RegexOptions.Compiled);
         private const int pt = 11;
         private static int paragraphCounter = 0;
         static void GenerateTOC(string rootPath)
