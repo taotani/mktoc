@@ -8,15 +8,29 @@ namespace toc_generator
 {
     class Program
     {
+
+        // patterns of section titles
         private static readonly Regex BEGIN_SECTION = new Regex(@"(^\d\.\d.[^\d])|(^[A-Z]\d.[^\d])|(^この章)|(^目次)|(^目標)", RegexOptions.Compiled);
+        // patterns of subsection titles
         private static readonly Regex BEGIN_SUB_SECTION = new Regex(@"(^\d\.\d\.\d)|(^[A-Z]\d\.\d)", RegexOptions.Compiled);
+        // patterns of chapter titles
         private static readonly Regex BEGIN_CHAPTER = new Regex(@"(^第.章)|(^\d\.[^\d])|(^§)", RegexOptions.Compiled);
+        // font size
         private const int pt = 11;
+        // global counter to maintain 
         private static int paragraphCounter = 0;
+        /// <summary>
+        /// Generates TOC for each PowerPoint document as a Word document
+        /// </summary>
+        /// <param name="rootPath">The root path that contains all PowerPoint documents to be processed</param>
         static void GenerateTOC(string rootPath)
         {
-            var objPowerPoint = new PowerPoint.Application();
-            var objWord = new Word.Application();
+            var objPowerPoint = new PowerPoint.Application(){
+                DisplayAlerts = PowerPoint.PpAlertLevel.ppAlertsNone
+            };
+            var objWord = new Word.Application(){
+                DisplayAlerts = Word.WdAlertLevel.wdAlertsNone
+            };
             try
             {
                 foreach (var file in Directory.GetFiles(rootPath, "*.ppt?", SearchOption.AllDirectories))
@@ -89,8 +103,15 @@ namespace toc_generator
                         AddHeader(wordDoc, file_name);
                         AddFooter(wordDoc, file_name);
                         wordDoc.SaveAs2(outputPath);
-                        //wordDoc.Close();
-                        //pptDoc.Close();
+                        try
+                        {
+                            wordDoc.Close(SaveChanges:false);
+                            pptDoc.Close();
+                        }
+                        catch(Exception e)
+                        {
+                            Console.Error.WriteLine($"An exception has been thrown @ closing the PowerPoint and Word documents: {e.Message}");
+                        }
                         Console.WriteLine($"Completed: {outputPath}.");
                     }
                 }
@@ -101,12 +122,29 @@ namespace toc_generator
                 objWord.Quit();
             }
         }
+        /// <summary>
+        /// Obtains the footer and header names for the given file. 
+        /// </summary>
+        /// <param name="fileName">The file name of the PowerPoint document</param>
+        /// <returns> 
+        /// <list>
+        /// <item>"本編目次" if the fileName contains "main" (for example "05_main.pptx")</item>
+        /// <item> "付録目次" if the fileName contains "appendix" (for example "06_appendix.pptx") </item>
+        /// <item> "目次" otherwise </item>
+        /// </list>
+        /// </returns>
         private static string FooterHeaderName(string fileName)
         {
             if (fileName.Contains("main")) return "本編目次";
             else if (fileName.Contains("appendix")) return "付録目次";
             else return "目次";
         }
+
+        /// <summary>
+        /// Adds headers to Word documents
+        /// </summary>
+        /// <param name="wordDoc">The Word document</param>
+        /// <param name="fileName">The file name of the PowerPoint document</param>
         private static void AddHeader(Word.Document wordDoc, string fileName)
         {
             foreach (Word.Section section in wordDoc.Sections)
@@ -128,6 +166,12 @@ namespace toc_generator
                 }
             }
         }
+
+        /// <summary>
+        /// Adds footers to Word documents
+        /// </summary>
+        /// <param name="wordDoc">The Word document</param>
+        /// <param name="fileName">The file name of the PowerPoint document</param>
         private static void AddFooter(Word.Document wordDoc, string fileName)
         {
             foreach (Word.Section section in wordDoc.Sections)
@@ -142,6 +186,13 @@ namespace toc_generator
                 }
             }
         }
+
+        /// <summary>
+        /// Creates chapter entries
+        /// </summary>
+        /// <param name="wordDoc">The Word document</param>
+        /// <param name="str">The title of the chapter</param>
+        /// <returns></returns>
         private static Word.Paragraph NewParagraphForChapters(Word.Document wordDoc, string str)
         {
             var p = NewParagraph(wordDoc, str);
@@ -150,6 +201,12 @@ namespace toc_generator
             p.Range.Bold = 1;
             return p;
         }
+        /// <summary>
+        /// Creates section entries
+        /// </summary>
+        /// <param name="wordDoc">The Word document</param>
+        /// <param name="str">The title of the section</param>
+        /// <returns></returns>
         private static Word.Paragraph NewParagraphForSections(Word.Document wordDoc, string str)
         {
             var p = NewParagraph(wordDoc, str);
@@ -158,6 +215,12 @@ namespace toc_generator
             p.Range.Bold = 0;
             return p;
         }
+        /// <summary>
+        /// Creates subsection entries
+        /// </summary>
+        /// <param name="wordDoc">The Word document</param>
+        /// <param name="str">The title of the subsection</param>
+        /// <returns></returns>
         private static Word.Paragraph NewParagraphForSubSections(Word.Document wordDoc, string str)
         {
             var p = NewParagraph(wordDoc, str);
@@ -166,6 +229,12 @@ namespace toc_generator
             p.Range.Bold = 0;
             return p;
         }
+        /// <summary>
+        /// Creates a paragraph object
+        /// </summary>
+        /// <param name="wordDoc">The Word document</param>
+        /// <param name="str">The content of the paragraph</param>
+        /// <returns></returns>
         private static Word.Paragraph NewParagraph(Word.Document wordDoc, string str)
         {
             var wordParagraph = wordDoc.Content.Paragraphs.Add();
@@ -184,25 +253,3 @@ namespace toc_generator
         }
     }
 }
-
-
-// Sub createIndex()
-//     'ファイルのオープン
-//     Open "TableOfContents.txt" For Output As #1
-//         'ヘッダの印字
-//         Print #1, "タイトル"; vbTab; "ページ"
-//         For Each Slide In Application.ActivePresentation.Slides
-//             'スライドタイトルの取得
-//             Title = Slide.Shapes.Title.TextFrame.TextRange.Text
-//             '非表示文字の削除
-//             Title = Replace(Title, vbVerticalTab, "") '垂直タブ
-//             Title = Replace(Title, vbTab, "")         '水平タブ
-//             Title = Replace(Title, vbNewLine, "")     '改行文字
-//             'ページ番号の取得
-//             pageNum = Slide.SlideNumber
-//             'ファイルへ出力
-//             Print #1, Title; vbTab; pageNum
-//         Next
-//     'ファイルのクローズ
-//     Close #1
-// End Sub
